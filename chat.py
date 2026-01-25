@@ -451,12 +451,13 @@ HTML_TEMPLATE = r"""
         .user-info {
             display: flex;
             align-items: center;
-            gap: 1rem;
+            gap: 0.75rem;
             margin-bottom: 1.5rem;
             padding: 0.75rem;
             background: var(--bg-tertiary);
             border-radius: var(--radius-md);
             border: 1px solid var(--border);
+            position: relative;
         }
         
         .user-avatar {
@@ -476,6 +477,7 @@ HTML_TEMPLATE = r"""
         .user-details {
             flex: 1;
             min-width: 0;
+            padding-right: 70px; /* Space for logout button */
         }
         
         .user-name {
@@ -488,42 +490,48 @@ HTML_TEMPLATE = r"""
         }
         
         .logout-btn {
-            padding: 0.5rem 1rem;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            padding: 0.4rem 0.75rem;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
             border-radius: var(--radius-sm);
-            color: var(--text-secondary);
-            font-size: 0.813rem;
+            color: var(--danger);
+            font-size: 0.75rem;
             cursor: pointer;
             transition: all 0.2s;
             white-space: nowrap;
+            font-weight: 500;
+            z-index: 10;
         }
         
         .logout-btn:hover {
-            background: rgba(239, 68, 68, 0.1);
+            background: rgba(239, 68, 68, 0.2);
             border-color: var(--danger);
-            color: var(--danger);
+            transform: translateY(-1px);
         }
         
         .credit-display {
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            padding: 0.5rem 0.75rem;
+            padding: 0.4rem 0.75rem;
             background: var(--primary-light);
             border: 1px solid rgba(99, 102, 241, 0.3);
             border-radius: var(--radius-md);
-            font-size: 0.813rem;
+            font-size: 0.75rem;
             color: var(--primary);
+            font-weight: 500;
         }
         
         .credit-count {
             background: var(--primary);
             color: white;
-            padding: 0.125rem 0.625rem;
-            border-radius: 12px;
+            padding: 0.125rem 0.5rem;
+            border-radius: 10px;
             font-weight: 700;
-            font-size: 0.75rem;
+            font-size: 0.7rem;
         }
         
         .new-chat-btn {
@@ -541,6 +549,7 @@ HTML_TEMPLATE = r"""
             justify-content: center;
             gap: 0.75rem;
             font-size: 0.938rem;
+            margin-bottom: 1rem;
         }
         
         .new-chat-btn:hover {
@@ -552,10 +561,17 @@ HTML_TEMPLATE = r"""
             transform: translateY(0);
         }
         
+        .sidebar-bottom {
+            padding: 1rem;
+            border-top: 1px solid var(--border);
+            margin-top: auto;
+            background: var(--bg-secondary);
+        }
+        
         .conversations-list {
             flex: 1;
             overflow-y: auto;
-            padding: 1rem;
+            padding: 0 1rem 1rem;
         }
         
         .conversations-list::-webkit-scrollbar {
@@ -572,8 +588,8 @@ HTML_TEMPLATE = r"""
         }
         
         .conversation-item {
-            padding: 1rem;
-            margin-bottom: 0.75rem;
+            padding: 0.875rem;
+            margin-bottom: 0.5rem;
             background: var(--bg-tertiary);
             border-radius: var(--radius-md);
             cursor: pointer;
@@ -595,26 +611,26 @@ HTML_TEMPLATE = r"""
         }
         
         .conversation-title {
-            font-size: 0.875rem;
+            font-size: 0.813rem;
             font-weight: 500;
-            margin-bottom: 0.375rem;
+            margin-bottom: 0.25rem;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            padding-right: 2rem;
+            padding-right: 1.75rem;
         }
         
         .conversation-date {
-            font-size: 0.75rem;
+            font-size: 0.688rem;
             opacity: 0.8;
         }
         
         .conversation-delete {
             position: absolute;
-            top: 0.75rem;
-            right: 0.75rem;
-            width: 24px;
-            height: 24px;
+            top: 0.5rem;
+            right: 0.5rem;
+            width: 20px;
+            height: 20px;
             background: rgba(239, 68, 68, 0.9);
             border: none;
             border-radius: var(--radius-sm);
@@ -623,7 +639,7 @@ HTML_TEMPLATE = r"""
             display: none;
             align-items: center;
             justify-content: center;
-            font-size: 0.75rem;
+            font-size: 0.688rem;
             transition: all 0.2s;
         }
         
@@ -1358,6 +1374,13 @@ HTML_TEMPLATE = r"""
             
             .user-details {
                 width: 100%;
+                padding-right: 0;
+            }
+            
+            .logout-btn {
+                position: static;
+                width: 100%;
+                margin-top: 0.5rem;
             }
             
             .header-top {
@@ -1521,15 +1544,22 @@ HTML_TEMPLATE = r"""
                             <span class="credit-count" id="creditCount">{{ user_credits }}</span>
                         </div>
                     </div>
-                    <button class="logout-btn" onclick="logout()">Logout</button>
+                    <button class="logout-btn" onclick="logout()">🚪 Logout</button>
                 </div>
                 <button class="new-chat-btn" onclick="createNewChat()">
                     <span>➕</span>
                     <span>New Chat</span>
                 </button>
             </div>
+            
             <div class="conversations-list" id="conversationsList">
                 <!-- Conversations will be loaded here -->
+            </div>
+            
+            <div class="sidebar-bottom">
+                <div style="text-align: center; color: var(--text-secondary); font-size: 0.75rem; padding: 0.5rem;">
+                    Powered by <strong style="color: var(--primary);">{{ bot_name }}</strong>
+                </div>
             </div>
         </div>
 
