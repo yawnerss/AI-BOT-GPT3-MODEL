@@ -2142,7 +2142,7 @@ function checkForCommands() {
             const models = {
                 "1": {"id": "nanobanana", "name": "🍌 Nanobanana (Basic)", "desc": "Fast, basic quality"},
                 "2": {"id": "nanobanana2", "name": "🍌 Nanobanana Pro", "desc": "Enhanced quality"},
-                "3": {"id": "Seedream4", "name": "🌱 Seedream 4", "desc": "Artistic style"},
+                "3": {"id": "Seedream4", "name": "🌱 Seedream 4 (UNDERMAINTENANCE)", "desc": "Artistic style"},
                 "4": {"id": "qwen", "name": "🤖 Qwen", "desc": "Balanced quality"},
                 "5": {"id": "gpt_1low", "name": "⚡ GPT-1 Low", "desc": "Fast generation"},
                 "6": {"id": "gpt_1medium", "name": "🎯 GPT-1 Medium", "desc": "Better quality"},
