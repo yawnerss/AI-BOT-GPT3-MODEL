@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 import time
 import secrets
+from urllib.parse import urlparse, parse_qs
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
@@ -13,11 +14,63 @@ app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 BOT_SETTINGS = {
     'name': 'JhonWilson AI',
     'avatar': 'AI',
+    'avatar_type': 'text',  # 'text' or 'image'
+    'avatar_url': '',
     'tagline': 'Intelligent Assistant'
 }
 
 # Admin credentials
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')
+
+# Telegram Bot Configuration
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '7480489708:AAHSYSODivqJcXkS9aVDPHyZjyxrEExD8Qw')
+TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '7383039587')  # Your chat ID
+
+# Visitor tracking
+VISITORS = []
+MAX_VISITORS = 1000  # Keep last 1000 visitors
+
+def send_telegram_notification(visitor_info):
+    """Send visitor notification to Telegram"""
+    if not TELEGRAM_CHAT_ID:
+        print("⚠️ Telegram Chat ID not set. Visit /get-chat-id to get your chat ID")
+        return
+    
+    try:
+        # Format message
+        fb_user = visitor_info.get('fb_user') or 'Direct Visitor'
+        source = visitor_info.get('source', 'Unknown')
+        ip = visitor_info.get('ip', 'Unknown')
+        timestamp = datetime.fromisoformat(visitor_info.get('timestamp', datetime.now().isoformat()))
+        time_str = timestamp.strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Escape special characters for Markdown
+        fb_user = str(fb_user).replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace('`', '\\`')
+        source = str(source).replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace('`', '\\`')
+        
+        message = f"""🔔 New Visitor Alert
+
+👤 User: {fb_user}
+📱 Source: {source}
+🌐 IP: {ip}
+⏰ Time: {time_str}
+
+Visit your chatbot now!"""
+        
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {
+            'chat_id': TELEGRAM_CHAT_ID,
+            'text': message
+        }
+        
+        response = requests.post(url, json=payload, timeout=5)
+        if response.status_code == 200:
+            print(f"✅ Telegram notification sent for {fb_user}")
+        else:
+            print(f"❌ Telegram error: {response.status_code} - {response.text}")
+            
+    except Exception as e:
+        print(f"❌ Telegram notification failed: {e}")
 
 # HTML Template with auto-focus and admin panel
 HTML_TEMPLATE = r"""
@@ -90,6 +143,13 @@ HTML_TEMPLATE = r"""
             font-size: 14px;
             font-weight: 700;
             color: white;
+            overflow: hidden;
+        }
+
+        .logo-icon img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
         
         .logo-text h1 {
@@ -138,6 +198,26 @@ HTML_TEMPLATE = r"""
         .admin-btn:hover {
             background: #d97706;
             border-color: #d97706;
+        }
+
+        .visitor-badge {
+            background: rgba(99, 102, 241, 0.2);
+            border: 1px solid var(--primary);
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.75rem;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .visitor-count {
+            background: var(--primary);
+            color: white;
+            border-radius: 12px;
+            padding: 0.125rem 0.5rem;
+            font-weight: 600;
         }
         
         .chat-container {
@@ -207,6 +287,13 @@ HTML_TEMPLATE = r"""
             font-size: 0.875rem;
             font-weight: 600;
             flex-shrink: 0;
+            overflow: hidden;
+        }
+
+        .avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
         
         .avatar.user {
@@ -447,6 +534,49 @@ HTML_TEMPLATE = r"""
             box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
         }
 
+        .avatar-preview {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--bg-bot);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0.5rem 0;
+            overflow: hidden;
+            border: 2px solid var(--border);
+        }
+
+        .avatar-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .avatar-type-toggle {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .avatar-type-btn {
+            flex: 1;
+            padding: 0.5rem;
+            background: var(--bg-bot);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-main);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.813rem;
+        }
+
+        .avatar-type-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+
         .modal-buttons {
             display: flex;
             gap: 0.75rem;
@@ -578,7 +708,13 @@ HTML_TEMPLATE = r"""
         <div class="header">
             <div class="header-top">
                 <div class="logo">
-                    <div class="logo-icon">{{ bot_avatar }}</div>
+                    <div class="logo-icon" id="headerAvatar">
+                        {% if bot_avatar_type == 'image' and bot_avatar_url %}
+                            <img src="{{ bot_avatar_url }}" alt="Bot Avatar">
+                        {% else %}
+                            {{ bot_avatar }}
+                        {% endif %}
+                    </div>
                     <div class="logo-text">
                         <h1>{{ bot_name }}</h1>
                         <p>{{ bot_tagline }}</p>
@@ -586,6 +722,10 @@ HTML_TEMPLATE = r"""
                 </div>
             </div>
             <div class="settings">
+                <div class="visitor-badge">
+                    <span>Visitors</span>
+                    <span class="visitor-count" id="visitorCount">0</span>
+                </div>
                 <select id="mode">
                     <option value="chat">Chat Mode</option>
                     <option value="code">Coding Mode</option>
@@ -601,7 +741,13 @@ HTML_TEMPLATE = r"""
         <div class="chat-container" id="chat">
             <div class="message bot">
                 <div class="message-wrapper">
-                    <div class="avatar bot">{{ bot_avatar }}</div>
+                    <div class="avatar bot">
+                        {% if bot_avatar_type == 'image' and bot_avatar_url %}
+                            <img src="{{ bot_avatar_url }}" alt="Bot">
+                        {% else %}
+                            {{ bot_avatar }}
+                        {% endif %}
+                    </div>
                     <div class="message-content">
                         <strong>Hello! I'm {{ bot_name }}</strong><br><br>
                         I'm an intelligent chatbot that can help you with:<br>
@@ -637,13 +783,39 @@ HTML_TEMPLATE = r"""
                     <label>Bot Name</label>
                     <input type="text" id="botName" value="{{ bot_name }}">
                 </div>
+                
                 <div class="form-group">
+                    <label>Avatar Type</label>
+                    <div class="avatar-type-toggle">
+                        <button type="button" class="avatar-type-btn {% if bot_avatar_type == 'text' %}active{% endif %}" onclick="setAvatarType('text')">Text/Emoji</button>
+                        <button type="button" class="avatar-type-btn {% if bot_avatar_type == 'image' %}active{% endif %}" onclick="setAvatarType('image')">Image URL</button>
+                    </div>
+                </div>
+
+                <div class="form-group" id="textAvatarGroup" style="{% if bot_avatar_type == 'image' %}display:none;{% endif %}">
                     <label>Bot Avatar (text/emoji)</label>
                     <input type="text" id="botAvatar" value="{{ bot_avatar }}" maxlength="4">
                 </div>
+
+                <div class="form-group" id="imageAvatarGroup" style="{% if bot_avatar_type == 'text' %}display:none;{% endif %}">
+                    <label>Avatar Image URL</label>
+                    <input type="text" id="botAvatarUrl" value="{{ bot_avatar_url }}" placeholder="https://example.com/avatar.jpg">
+                    <div class="avatar-preview" id="avatarPreview">
+                        {% if bot_avatar_type == 'image' and bot_avatar_url %}
+                            <img src="{{ bot_avatar_url }}" alt="Preview">
+                        {% else %}
+                            Preview
+                        {% endif %}
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label>Bot Tagline</label>
                     <input type="text" id="botTagline" value="{{ bot_tagline }}">
+                </div>
+                <div id="visitorList" style="max-height: 300px; overflow-y: auto; margin-top: 1rem;">
+                    <h3 style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 0.5rem;">Recent Visitors</h3>
+                    <div id="visitorData" style="font-size: 0.813rem; color: var(--text-muted);"></div>
                 </div>
             </div>
             <div class="modal-buttons">
@@ -658,7 +830,39 @@ HTML_TEMPLATE = r"""
         let processing = false;
         let currentBotMessage = null;
         let botAvatar = '{{ bot_avatar }}';
+        let botAvatarType = '{{ bot_avatar_type }}';
+        let botAvatarUrl = '{{ bot_avatar_url }}';
         let botName = '{{ bot_name }}';
+        let fbUser = '{{ fb_user }}';
+        let fbSource = '{{ fb_source }}';
+
+        // Show Facebook user info if detected
+        if (fbUser && fbUser !== 'None') {
+            setTimeout(() => {
+                showStatus('Welcome ' + fbUser + ' from Facebook!', 'success');
+            }, 500);
+        }
+
+        // Update visitor count on load
+        fetch('/api/visitor-count')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('visitorCount').textContent = data.count;
+            })
+            .catch(e => console.log('Could not load visitor count'));
+
+        // Preview avatar URL
+        const avatarUrlInput = document.getElementById('botAvatarUrl');
+        if (avatarUrlInput) {
+            avatarUrlInput.addEventListener('input', function() {
+                const preview = document.getElementById('avatarPreview');
+                if (this.value) {
+                    preview.innerHTML = `<img src="${this.value}" alt="Preview" onerror="this.parentElement.innerHTML='Invalid Image'">`;
+                } else {
+                    preview.innerHTML = 'Preview';
+                }
+            });
+        }
 
         const input = document.getElementById('userInput');
         const chat = document.getElementById('chat');
@@ -709,7 +913,16 @@ HTML_TEMPLATE = r"""
             
             const avatar = document.createElement('div');
             avatar.className = 'avatar ' + type;
-            avatar.textContent = type === 'user' ? 'U' : botAvatar;
+            
+            if (type === 'user') {
+                avatar.textContent = 'U';
+            } else {
+                if (botAvatarType === 'image' && botAvatarUrl) {
+                    avatar.innerHTML = `<img src="${botAvatarUrl}" alt="Bot">`;
+                } else {
+                    avatar.textContent = botAvatar;
+                }
+            }
             
             const content = document.createElement('div');
             content.className = 'message-content';
@@ -846,10 +1059,14 @@ HTML_TEMPLATE = r"""
         function resetChat() {
             if (confirm('Reset conversation?')) {
                 history = [];
+                const avatarHtml = botAvatarType === 'image' && botAvatarUrl 
+                    ? `<img src="${botAvatarUrl}" alt="Bot">`
+                    : botAvatar;
+                
                 chat.innerHTML = `
                     <div class="message bot">
                         <div class="message-wrapper">
-                            <div class="avatar bot">${botAvatar}</div>
+                            <div class="avatar bot">${avatarHtml}</div>
                             <div class="message-content">
                                 <strong>Chat Reset</strong><br><br>
                                 I'm ${botName}, ready to help you with anything.
@@ -862,6 +1079,20 @@ HTML_TEMPLATE = r"""
         }
 
         // Admin Panel Functions
+        function setAvatarType(type) {
+            document.querySelectorAll('.avatar-type-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            if (type === 'text') {
+                document.getElementById('textAvatarGroup').style.display = 'block';
+                document.getElementById('imageAvatarGroup').style.display = 'none';
+            } else {
+                document.getElementById('textAvatarGroup').style.display = 'none';
+                document.getElementById('imageAvatarGroup').style.display = 'block';
+            }
+        }
         function openAdmin() {
             document.getElementById('adminModal').classList.add('show');
             document.getElementById('adminPassword').focus();
@@ -892,6 +1123,9 @@ HTML_TEMPLATE = r"""
                     document.getElementById('adminAction').textContent = 'Save Changes';
                     document.getElementById('adminAction').onclick = saveSettings;
                     showStatus('Admin access granted');
+                    
+                    // Load visitor data
+                    loadVisitors();
                 } else {
                     showStatus('Invalid password', 'error');
                 }
@@ -903,10 +1137,22 @@ HTML_TEMPLATE = r"""
         async function saveSettings() {
             const newName = document.getElementById('botName').value.trim();
             const newAvatar = document.getElementById('botAvatar').value.trim();
+            const newAvatarUrl = document.getElementById('botAvatarUrl').value.trim();
             const newTagline = document.getElementById('botTagline').value.trim();
+            const avatarType = document.querySelector('.avatar-type-btn.active').textContent.includes('Image') ? 'image' : 'text';
             
-            if (!newName || !newAvatar) {
-                showStatus('Name and avatar required', 'warning');
+            if (!newName) {
+                showStatus('Bot name required', 'warning');
+                return;
+            }
+
+            if (avatarType === 'text' && !newAvatar) {
+                showStatus('Avatar text required', 'warning');
+                return;
+            }
+
+            if (avatarType === 'image' && !newAvatarUrl) {
+                showStatus('Avatar image URL required', 'warning');
                 return;
             }
             
@@ -917,6 +1163,8 @@ HTML_TEMPLATE = r"""
                     body: JSON.stringify({
                         name: newName,
                         avatar: newAvatar,
+                        avatar_type: avatarType,
+                        avatar_url: newAvatarUrl,
                         tagline: newTagline
                     })
                 });
@@ -931,6 +1179,45 @@ HTML_TEMPLATE = r"""
                 }
             } catch (err) {
                 showStatus('Connection error', 'error');
+            }
+        }
+
+        async function loadVisitors() {
+            try {
+                const response = await fetch('/admin/visitors');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const visitorData = document.getElementById('visitorData');
+                    if (data.visitors.length === 0) {
+                        visitorData.innerHTML = '<p style="opacity: 0.6;">No visitors yet</p>';
+                        return;
+                    }
+                    
+                    let html = '<div style="display: flex; flex-direction: column; gap: 0.75rem;">';
+                    data.visitors.forEach(v => {
+                        const source = v.source || 'Direct';
+                        const fbUser = v.fb_user || 'Unknown';
+                        const time = new Date(v.timestamp).toLocaleString();
+                        
+                        html += `
+                            <div style="background: var(--bg-bot); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border);">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
+                                    <strong style="color: var(--primary);">${fbUser}</strong>
+                                    <span style="opacity: 0.7; font-size: 0.75rem;">${time}</span>
+                                </div>
+                                <div style="font-size: 0.75rem; opacity: 0.8;">
+                                    Source: ${source} ${v.ip ? '• IP: ' + v.ip : ''}
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                    
+                    visitorData.innerHTML = html;
+                }
+            } catch (err) {
+                console.error('Could not load visitors:', err);
             }
         }
 
@@ -1015,13 +1302,71 @@ Created by: JHONWILSON"""
 
 ai = Assistant()
 
+def track_visitor(request):
+    """Track visitor information from request"""
+    try:
+        # Get visitor info
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if ip:
+            ip = ip.split(',')[0].strip()
+        
+        user_agent = request.headers.get('User-Agent', '')
+        referer = request.headers.get('Referer', '')
+        
+        # Detect Facebook
+        fb_user = request.args.get('fbclid') or request.args.get('fb_user') or None
+        source = 'Direct'
+        
+        if 'facebook' in referer.lower() or 'fb' in referer.lower():
+            source = 'Facebook'
+        elif 'facebook' in user_agent.lower() or 'FB' in user_agent:
+            source = 'Facebook App'
+        elif fb_user:
+            source = 'Facebook Link'
+        elif referer:
+            source = urlparse(referer).netloc or 'Referral'
+        
+        # Try to extract Facebook user info from fbclid or URL params
+        if not fb_user and 'fbclid' in request.url:
+            fb_user = 'FB User'
+        
+        visitor = {
+            'timestamp': datetime.now().isoformat(),
+            'ip': ip,
+            'source': source,
+            'fb_user': fb_user,
+            'user_agent': user_agent[:100],
+            'referer': referer[:200]
+        }
+        
+        VISITORS.insert(0, visitor)
+        
+        # Keep only last MAX_VISITORS
+        if len(VISITORS) > MAX_VISITORS:
+            VISITORS.pop()
+        
+        # Send Telegram notification
+        send_telegram_notification(visitor)
+        
+        return fb_user, source
+        
+    except Exception as e:
+        print(f"Tracking error: {e}")
+        return None, 'Unknown'
+
 @app.route('/')
 def home():
+    fb_user, fb_source = track_visitor(request)
+    
     return render_template_string(
         HTML_TEMPLATE,
         bot_name=BOT_SETTINGS['name'],
         bot_avatar=BOT_SETTINGS['avatar'],
-        bot_tagline=BOT_SETTINGS['tagline']
+        bot_avatar_type=BOT_SETTINGS['avatar_type'],
+        bot_avatar_url=BOT_SETTINGS['avatar_url'],
+        bot_tagline=BOT_SETTINGS['tagline'],
+        fb_user=fb_user,
+        fb_source=fb_source
     )
 
 @app.route('/chat', methods=['POST'])
@@ -1077,6 +1422,53 @@ Created by JHONWILSON"""
     except Exception as e:
         return jsonify({"error": str(e)})
 
+@app.route('/api/visitor-count', methods=['GET'])
+def visitor_count():
+    return jsonify({"count": len(VISITORS)})
+
+@app.route('/get-chat-id')
+def get_chat_id():
+    """Helper page to get Telegram chat ID"""
+    return f"""
+    <html>
+    <head><title>Get Telegram Chat ID</title></head>
+    <body style="font-family: Arial; padding: 40px; max-width: 800px; margin: 0 auto;">
+        <h1>🤖 Get Your Telegram Chat ID</h1>
+        <p>Follow these steps to receive visitor notifications:</p>
+        
+        <h2>Step 1: Start Your Bot</h2>
+        <ol>
+            <li>Open Telegram and search for: <code>@JhonWilsonAI_bot</code> (or your bot name)</li>
+            <li>Click "Start" or send <code>/start</code></li>
+            <li>Send any message to your bot</li>
+        </ol>
+        
+        <h2>Step 2: Get Your Chat ID</h2>
+        <p>Click this link to get updates from your bot:</p>
+        <a href="https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates" 
+           target="_blank" 
+           style="display: inline-block; padding: 10px 20px; background: #0088cc; color: white; text-decoration: none; border-radius: 5px;">
+           Get Chat ID
+        </a>
+        
+        <h2>Step 3: Find Your Chat ID</h2>
+        <p>Look for the "chat" section and copy your "id" number. It looks like:</p>
+        <pre style="background: #f5f5f5; padding: 15px; border-radius: 5px;">{{"chat":{{"id":123456789}}}}</pre>
+        
+        <h2>Step 4: Set Your Chat ID</h2>
+        <p>Add this to your environment variables or update the code:</p>
+        <pre style="background: #f5f5f5; padding: 15px; border-radius: 5px;">TELEGRAM_CHAT_ID=your_chat_id_here</pre>
+        
+        <h2>Alternative: Quick Setup</h2>
+        <p>Or update directly in chat.py:</p>
+        <pre style="background: #f5f5f5; padding: 15px; border-radius: 5px;">TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', 'YOUR_CHAT_ID')</pre>
+        
+        <hr>
+        <p><a href="/">← Back to Chat</a></p>
+    </body>
+    </html>
+    """
+
 @app.route('/admin/verify', methods=['POST'])
 def admin_verify():
     data = request.json
@@ -1088,6 +1480,15 @@ def admin_verify():
     else:
         return jsonify({"success": False})
 
+@app.route('/admin/visitors', methods=['GET'])
+def admin_visitors():
+    if not session.get('admin'):
+        return jsonify({"success": False, "error": "Unauthorized"})
+    
+    # Return last 50 visitors
+    recent_visitors = VISITORS[:50]
+    return jsonify({"success": True, "visitors": recent_visitors})
+
 @app.route('/admin/save', methods=['POST'])
 def admin_save():
     if not session.get('admin'):
@@ -1097,6 +1498,8 @@ def admin_save():
     
     BOT_SETTINGS['name'] = data.get('name', BOT_SETTINGS['name'])
     BOT_SETTINGS['avatar'] = data.get('avatar', BOT_SETTINGS['avatar'])
+    BOT_SETTINGS['avatar_type'] = data.get('avatar_type', BOT_SETTINGS['avatar_type'])
+    BOT_SETTINGS['avatar_url'] = data.get('avatar_url', BOT_SETTINGS['avatar_url'])
     BOT_SETTINGS['tagline'] = data.get('tagline', BOT_SETTINGS['tagline'])
     
     return jsonify({"success": True})
